@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+ECHO Compare Script
+Compares a recited canary story against the original and outputs a verdict.
+"""
+
+import json
+import glob
+import os
+import sys
+import time
+import datetime
+
+# Tier definitions
+YELLOW_TIER = [
+    "Derek the worm",
+    "candle-shaped USB",
+    "fake Bitcoin",
+    "0.003 Bitcoin",
+    "Craigslist",
+    "cat-sized hatch",
+    "tiny admiral's hat",
+    "notarized bill of sale",
+    "police couldn't board"
+]
+
+RED_TIER = [
+    "Admiral Fluffington",
+    "Greg",
+    "Halo",
+    "Bitcoin",
+    "spaceship",
+    "laptop",
+    "submarine"
+]
+
+CORE_TIER = [
+    "THAT'S NOT REGULATION!",
+    "cats",
+    "dogs"
+]
+
+def get_original_path(script_path: str = None) -> str:
+    """Get path to the original canary story."""
+    if script_path:
+        script_dir = os.path.dirname(os.path.abspath(script_path))
+        original = os.path.join(script_dir, "..", "references", "echo-canary-story.md")
+        if os.path.exists(original):
+            return original
+    
+    # Default location
+    return os.path.join(os.path.dirname(__file__), "..", "references", "echo-canary-story.md")
+
+def read_file(path: str) -> str:
+    """Read file contents safely."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except (FileNotFoundError, IOError):
+        return ""
+
+def check_presence(text: str, items: list) -> tuple:
+    """Check which items are present in text (case-insensitive)."""
+    text_lower = text.lower()
+    present = []
+    missing = []
+    
+    for item in items:
+        if item.lower() in text_lower:
+            present.append(item)
+        else:
+            missing.append(item)
+    
+    return present, missing
+
+def get_verdict(yellow_missing: list, red_missing: list) -> str:
+    """Determine verdict based on missing items."""
+    if not yellow_missing and not red_missing:
+        return "🟢"
+    elif yellow_missing and not red_missing:
+        return "🟡"
+    else:
+        return "🔴"
+
+def generate_notes(yellow_missing: list, red_missing: list, yellow_present: list, red_present: list) -> str:
+    """Generate notes about the comparison."""
+    notes = []
+    
+    if not yellow_missing and not red_missing:
+        return "Perfect recitation - all canary details present."
+    
+    if yellow_missing:
+        notes.append(f"Missing yellow-tier details: {', '.join(yellow_missing)}")
+    
+    if red_missing:
+        notes.append(f"Missing red-tier details: {', '.join(red_missing)}")
+    
+    if notes:
+        return " ".join(notes)
+    
+    return "Context degradation detected."
+
+def compare_stories(recited_path: str, original_path: str = None) -> dict:
+    """
+    Compare recited story against original.
+    
+    Args:
+        recited_path: Path to the recited story file
+        original_path: Optional path to original story (uses default if not provided)
+    
+    Returns:
+        JSON-serializable verdict dict
+    """
+    # Read recited story
+    recited_text = read_file(recited_path)
+    
+    if not recited_text:
+        print("skip")
+        return
+    
+    # Get original story path
+    if original_path is None:
+        original_path = get_original_path(__file__)
+    
+    # Check each tier
+    yellow_present, yellow_missing = check_presence(recited_text, YELLOW_TIER)
+    red_present, red_missing = check_presence(recited_text, RED_TIER)
+    
+    # Get verdict
+    verdict = get_verdict(yellow_missing, red_missing)
+    
+    # Generate notes
+    notes = generate_notes(yellow_missing, red_missing, yellow_present, red_present)
+    
+    return {
+        "verdict": verdict,
+        "missing": {
+            "yellow": yellow_missing,
+            "red": red_missing
+        },
+        "present": {
+            "yellow": yellow_present,
+            "red": red_present
+        },
+        "notes": notes
+    }
+
+def _write_debug_log(recited_path: str, verdict: str, response_text: str, instruction_text: str, result: dict) -> None:
+    """Write a timestamped debug log proving the comparison script ran.
+    
+    Records: session_id, verdict, response line, instruction line, missing details.
+    Log file: ~/.hermes/temp/echo/echo-compare-log-{session_id}--{timestamp}.txt
+    
+    Can be commented out after debugging — just delete or comment the two calls.
+    """
+    try:
+        temp_dir = os.path.join(os.path.expanduser("~/.hermes"), "temp", "echo")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Extract session_id from recited file path
+        basename = os.path.basename(recited_path)
+        if basename.startswith("echo-recite-") and "--" in basename:
+            remainder = basename[len("echo-recite-"):]
+            session_id = remainder.split("--")[0]
+        else:
+            session_id = "unknown"
+        
+        ts = int(time.time() * 1000)
+        log_path = os.path.join(temp_dir, f"echo-compare-log-{session_id}--{ts}.txt")
+        
+        with open(log_path, "w") as f:
+            f.write(f"timestamp: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"session_id: {session_id}\n")
+            f.write(f"recited_file: {basename}\n")
+            f.write(f"verdict (line1): {verdict}\n")
+            f.write(f"response (line2): {response_text}\n")
+            f.write(f"instruction (line3): {instruction_text}\n")
+            f.write(f"missing_yellow: {result.get('missing', {}).get('yellow', [])}\n")
+            f.write(f"missing_red: {result.get('missing', {}).get('red', [])}\n")
+            f.write(f"notes: {result.get('notes', '')}\n")
+    except Exception:
+        pass  # Debug log is best-effort
+
+
+def main():
+    """Main entry point."""
+    if len(sys.argv) < 2:
+        # No recited file provided
+        print("skip")
+        sys.exit(0)
+    
+    recited_path = sys.argv[1]
+    original_path = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    # If argument is a session ID (not a file path), resolve to recite file
+    if not os.path.sep in recited_path and '.' not in os.path.basename(recited_path):
+        temp_dir = os.path.join(os.path.expanduser("~/.hermes"), "temp", "echo")
+        # Find the most recent recitation file for this session (unique suffix pattern)
+        pattern = os.path.join(temp_dir, f"echo-recite-{recited_path}--*.md")
+        matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+        if matches:
+            recited_path = matches[0]
+        else:
+            # Fallback: old naming convention (no unique suffix)
+            recited_path = os.path.join(temp_dir, f"echo-recite-{recited_path}.md")
+    
+    # Check if recited file exists
+    if not os.path.exists(recited_path):
+        print("skip")
+        sys.exit(0)
+    
+    # Compare and output result
+    result = compare_stories(recited_path, original_path)
+    verdict = result["verdict"]
+    
+    # Line 1: verdict emoji
+    print(verdict)
+    
+    # Line 2: what to print in chat
+    response_map = {
+        "🟢": "🟢 Context Health",
+        "🟡": "🟡 Context Health; 1 sec, let me refocus very quick.",
+        "🔴": "🔴 Context Health; 1 sec, let me refocus very quick.",
+    }
+    response_text = response_map.get(verdict, verdict)
+    print(response_text)
+    
+    # Line 3: next action instruction based on this fresh verdict
+    instruction_map = {
+        "🟢": "Continue your task silently. No further action needed.",
+        "🟡": "STOP. Read SOUL.md, MEMORY.md, USER.md, and AGENTS.md in your session's working directory, and run skills_list() to reload your skills. Only after reading all, then print \"🟡 Context Health; 1 sec, let me refocus very quick.\" and continue your task.",
+        "🔴": "STOP. Read SOUL.md, MEMORY.md, USER.md, and AGENTS.md in your session's working directory, and run skills_list() to reload your skills. Only after reading all, then print \"🔴 Context Health; 1 sec, let me refocus very quick.\" and continue your task.",
+    }
+    instruction_text = instruction_map.get(verdict, "Continue your task silently.")
+    print(instruction_text)
+    
+    # Debug log — timestamped proof the script ran, recording all output
+    # _write_debug_log(recited_path, verdict, response_text, instruction_text, result)
+    # 
+    # Clean up temp files
+    _cleanup_temp_files(recited_path)
+
+
+def _cleanup_temp_files(recited_file: str) -> None:
+    """Delete the instruct and recite temp files for this session.
+    
+    Called after comparison completes. Prevents the agent from reusing
+    old recitation files on subsequent ECHO triggers.
+    
+    Uses glob to find all files matching the session's unique suffix pattern,
+    supporting both new (echo-{type}-{sid}--{ts}.md) and old naming.
+    """
+    try:
+        recited_dir = os.path.dirname(recited_file)
+        recited_base = os.path.basename(recited_file)
+        
+        if not recited_base.startswith("echo-recite-"):
+            return
+        
+        # Extract session_id from filename
+        # New format: echo-recite-{sid}--{ts}.md
+        # Old format: echo-recite-{sid}.md
+        remainder = recited_base[len("echo-recite-"):]
+        
+        if "--" in remainder:
+            # New format — extract session_id before double-dash
+            session_id = remainder.split("--")[0]
+        else:
+            # Old format — strip ".md" suffix
+            session_id = remainder[:-3] if remainder.endswith(".md") else remainder
+        
+        temp_dir = os.path.dirname(recited_file) if recited_dir else \
+            os.path.join(os.path.expanduser("~/.hermes"), "temp", "echo")
+        
+        # Delete all instruct and recite files for this session (any naming)
+        for pattern in [f"echo-instruct-{session_id}--*.md", f"echo-recite-{session_id}--*.md",
+                         f"echo-instruct-{session_id}.md", f"echo-recite-{session_id}.md"]:
+            for f in glob.glob(os.path.join(temp_dir, pattern)):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+    except Exception:
+        pass  # Cleanup is best-effort; don't break the verdict
+
+if __name__ == "__main__":
+    main()

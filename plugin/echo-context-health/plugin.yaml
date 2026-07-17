@@ -1,0 +1,4 @@
+name: echo-context-health
+version: 2.3.0
+description: "ECHO (Effective Context Health Optimization) — monitors context health via a canary story pattern and triggers soft resets."
+author: Skywalker

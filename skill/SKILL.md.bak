@@ -1,0 +1,69 @@
+---
+name: echo-context-health
+description: "ECHO (Effective Context Health Optimization) — monitors context health via a canary story recitation test and scripts the verification."
+version: 2.2.0
+author: Skywalker
+tags: [context, health, monitoring, canary, echo]
+---
+
+# ECHO Protocol
+
+## 🔴 HARD RULES (violating any = system failure)
+
+1. **DO NOT** call `skills_list()`, read story reference files, or load any OTHER skill. This skill (`echo-context-health`) is the only one you loaded — everything you need is here.
+2. **DO NOT** self-verify or self-assign a verdict. The comparison script produces the **only** valid verdict.
+3. **DO NOT** narrate any steps, reads, or intermediate work in the chat. The ONLY visible output is the verdict line (step 4).
+4. **DO NOT** recite the story in the chat. Write it to file only.
+5. Write the recite file **FIRST**, before running the comparison script.
+
+## Protocol (follow in order, all steps silent except step 4)
+
+```
+1. Read the instruct file from ~/.hermes/temp/echo/ (look for echo-instruct-{session_id}--*.md)
+   It contains the exact recite file path and instructions. Do NOT read story files.
+
+2. Write the canary story from MEMORY ONLY to the recite path from step 1.
+
+3. Run through terminal (silent, no output echoed):
+     python ~/.hermes/skills/echo-context-health/scripts/echo-compare.py {session_id}
+
+4. Read the script's stdout — it returns TWO lines:
+     Line 1: verdict (it'll be an actual emoji). THAT is the verdict. Do not interpret, weigh, or override it.
+     Line 2: what you must print in the chat based on that fresh given verdict. Print ONLY that line.
+
+5. Act accordingly:
+     If 🟢 → continue your interrupted task silently.
+     If 🟡 or 🔴 → run the Soft Reset Protocol silently. Then continue your task.
+```
+
+## Soft Reset Protocol (for 🟡 or 🔴 verdicts)
+
+Run these silently — do NOT narrate them in the chat. The 🟡 or 🔴 line from step 4 is the only visible output:
+
+1. Re-read SOUL.md (covers identity + canary story)
+2. Re-read MEMORY.md
+3. Re-read USER.md
+4. Continue your task
+
+## Verdict Meanings
+
+| Verdict | Meaning | Action |
+|---------|---------|--------|
+| 🟢 | Context healthy | Continue task silently |
+| 🟡 | Minor degradation | Soft reset silently, then continue |
+| 🔴 | Serious degradation | Soft reset silently, then continue |
+
+## The Canary Story
+
+**Do NOT look up the story file or reference files.** Recite it from your in-context memory only. The comparison script compares your recitation against the ground-truth of the original canary story.
+
+---
+
+## Related Files
+
+| File | Purpose |
+|------|---------|
+| `skill-info.md` | Architecture docs, empirical calibration, debugging checklist |
+| `SKILL-radio_silent.md` | Production swap-in — zero visible output on any verdict |
+
+*ECHO v2.2 — silent-execution, audible-verdict mode*

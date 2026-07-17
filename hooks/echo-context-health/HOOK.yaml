@@ -1,0 +1,4 @@
+name: echo-context-health
+description: "ECHO (Effective Context Health Optimization) — launches the watchdog on gateway:startup."
+events:
+  - gateway:startup
