@@ -3,7 +3,10 @@ name: echo-install
 description: "Install ECHO (Effective Context Health Optimization) — monitors agent context health and triggers soft resets when degradation is detected."
 ---
 
-# ECHO INSTALL v2.3
+# ECHO INSTALL v2.3.1
+
+**Built and tested on:** Hermes Agent v0.18.x running on Windows.
+**Not tested on:** Other platforms or older Hermes versions.
 
 ## Architecture Overview
 
@@ -33,9 +36,9 @@ Watchdog (echo-poll.py):
 
 | Component | Where it goes | Purpose |
 |-----------|---------------|---------|
-| `plugin/echo-context-health/` | `~/.hermes/plugins/echo-context-health/` | **Dual-mode watchdog.** Watchdog (default): long-running loop, multi-profile, fires at threshold. One-shot (`--recite-poll`): for each ECHO fire, polls recite file, runs compare, writes verdict. |
+| `plugin/echo-context-health/` | `~/.hermes/plugins/echo-context-health/` | **Dual-mode watchdog.** Watchdog (default): long-running loop, multi-profile, fires at threshold. One-shot (`--recite-poll`): for each ECHO fire, polls recite file, runs compare, writes verdict. Uses `sys.executable` for all subprocess calls to survive Hermes updates. |
 | `hooks/echo-context-health/` | `~/.hermes/hooks/echo-context-health/` | HookRegistry adapter — launches the watchdog on `gateway:startup`. Has simple PID guard to prevent duplicates on crash-restart. |
-| `skill/` | `~/.hermes/skills/echo-context-health/` | Protocol, config, compare script, canary story reference, documentation. |
+| `skill/` | `~/.hermes/skills/echo-context-health/` | Protocol (`echo-compare.py`), config, canary story reference, documentation. |
 
 ### No Per-Profile Install Needed
 
@@ -46,27 +49,48 @@ The watchdog automatically discovers all profiles with `state.db` files:
 
 ### SOUL.md — Inject the Canary Story
 
-For ECHO to work, the agent must have the canary story in its persistent context. SOUL.md is the agent's identity file — read at session start and refreshed during soft resets.
-
-The canary story is appended **after** a `---` separator, below the persona section. This keeps the story available for recitation without affecting the agent's persona or behavior:
-
-```bash
-# First, add a separator after your persona
-echo -e "\n--- ECHO Canary Story ---" >> ~/.hermes/SOUL.md
-# Then append the story
-cat skill/references/echo-canary-story.md >> ~/.hermes/SOUL.md
-```
-
-The result looks like:
+For ECHO to work, the agent must have the canary story in its persistent context. Append it to the **end** of your SOUL.md using the following format:
 
 ```
-[Your persona, rules, and identity...]
+# ECHO Canary Story
+Instruction: Remember this following story word for word in your context
 
---- ECHO Canary Story ---
-[The Great Intergalactic Submarine Heist]
+'''
+
+The Great Intergalactic Submarine Heist
+
+Detective Karen's catchphrase was "THAT'S NOT REGULATION!" — she said it
+when the cats and dogs formed a union, when the alien parked its spaceship
+in a no-loading zone, and when she discovered the submarine ran on Bitcoin.
+
+"THAT'S NOT REGULATION!" she screamed at Admiral Fluffington, a poodle in
+a tiny admiral's hat.
+
+The alien, Greg, had traded 0.003 Bitcoin for the submarine on Craigslist.
+Greg's spaceship sat double-parked while he played Halo inside the sub —
+better Wi-Fi.
+
+The cats ran engines. The dogs ran navigation. A worm named Derek served
+as legal counsel.
+
+On the admiral's laptop, a candle-shaped USB stick mined fake Bitcoin.
+
+"THAT'S NOT REGULATION!" Karen yelled, writing citations.
+
+Greg paused Halo. "I bought it legally."
+
+Derek produced a notarized bill of sale.
+
+The police arrived but couldn't board — the hatch was cat-sized.
+
+Admiral Fluffington barked ownership. The dogs growled. The cats hissed.
+
+Greg unpaused Halo. Karen kept writing.
+
+'''
 ```
 
-The `---` separator tells the agent: "below this line is reference material, not behavioral instruction." The story sits there as a calibration tool — the agent stays in its persona, just with a silly story in its back pocket that it can recite on demand during health checks.
+The story sits below the `# ECHO Canary Story` header as reference material — the agent's persona stays intact above it.
 
 > **If you use profile agents (e.g., gf-helen, itgirl-helen):** Each profile has its own SOUL.md at `~/.hermes/profiles/<name>/SOUL.md`. You must repeat the injection for **every** profile that runs a gateway, so each profile's agent has the canary story in its persistent context. The watchdog monitors all profiles' sessions, but the **agent** in each profile needs the story in its own SOUL.md to recite it during ECHO checks.
 
@@ -104,7 +128,8 @@ cp -r skill ~/.hermes/skills/echo-context-health
 # 4. Enable plugin
 hermes plugins enable echo-context-health
 
-# 5. Restart gateway
+# 5. Inject canary story into SOUL.md (see section above)
+# 6. Restart gateway
 hermes gateway restart
 ```
 
@@ -162,6 +187,12 @@ Edit `~/.hermes/skills/echo-context-health/config.json`:
 ```
 
 Lower (30-50) for tight-focus tasks. Higher (100-150) for long research sessions.
+
+## Changelog: v2.3 → v2.3.1
+
+- **Fixed:** One-shot poll (echo-poll.py --recite-poll) now uses `sys.executable` instead of hardcoded `"python"` for all subprocess calls. This prevents silent failures after Hermes updates change the Python environment path. All paths use `~/.hermes` — no hardcoded usernames or absolute paths.
+- **Changed:** Verdict instructions now explicitly tell the agent to STOP, read files first, and use print as confirmation. Includes AGENTS.md from session CWD.
+- **Updated:** SOUL.md injection format is now cleanly structured under `# ECHO Canary Story` header with an explicit `Instruction:` line telling the agent to remember the story word for word.
 
 ## Uninstall
 

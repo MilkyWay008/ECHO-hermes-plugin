@@ -158,7 +158,7 @@ def _run_recite_poll(session_id: str, unique_ts: str, hermes_home: str, profile:
         env["HERMES_PROFILE"] = profile
     try:
         result = subprocess.run(
-            ["python", compare_script, recite_file],
+            [sys.executable or "python", compare_script, recite_file],
             capture_output=True, text=True, timeout=30, env=env
         )
         lines = result.stdout.strip().split("\n")
@@ -236,7 +236,7 @@ def _fire_echo(session_id: str, hermes_home: str, profile: str = ""):
     poll_script = os.path.join(hermes_home, "plugins", "echo-context-health", "echo-poll.py")
     if os.path.exists(poll_script) and unique_suffix:
         args = [
-            "python", poll_script,
+            sys.executable or "python", poll_script,
             "--recite-poll", session_id, unique_suffix, hermes_home
         ]
         if profile:
