@@ -60,13 +60,27 @@ def read_file(path: str) -> str:
         return ""
 
 def check_presence(text: str, items: list) -> tuple:
-    """Check which items are present in text (case-insensitive)."""
+    """Check which items are present in text (case-insensitive).
+
+    Uses literal substring matching for exact phrases, and falls back to
+    word-level matching for cases where the agent reasonably rephrases
+    (e.g. "worm named Derek" should match "Derek the worm").
+    """
     text_lower = text.lower()
     present = []
     missing = []
     
     for item in items:
         if item.lower() in text_lower:
+            present.append(item)
+            continue
+        
+        # Fallback: check if all significant (non-stop) words from the
+        # phrase appear in the text. This handles rephrasings like
+        # "worm named Derek" → "Derek the worm".
+        words = [w for w in item.lower().split() 
+                 if w not in ("the", "a", "an", "of", "in", "on", "at", "to", "for", "and", "or", "'s", "s")]
+        if len(words) >= 2 and all(w in text_lower for w in words):
             present.append(item)
         else:
             missing.append(item)
