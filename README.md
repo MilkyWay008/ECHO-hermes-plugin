@@ -42,7 +42,7 @@ ECHO does not rely on Hermes' hook systems (PluginManager or HookRegistry events
 Key design highlights:
 - The watchdog starts and stops with the default gateway — no separate service to manage
 - No dependency on Hermes' PluginManager or HookRegistry event hooks for message counting
-- Single watchdog covers all profiles (default + gf-helen, itgirl-helen, etc.)
+- Single watchdog covers all profiles (default + ai-assist, coder, etc.)
 - Self-prompts via `hermes -p <profile> chat -r {sid}` to target correct profile
 - Uses `sys.executable` for all subprocess calls — survives Hermes updates
 - All paths use `~/.hermes` — no hardcoded usernames
@@ -270,7 +270,7 @@ Greg unpaused Halo. Karen kept writing.
 | Metric | Value |
 |--------|-------|
 | Total messages triggered at | 977 |
-| Profiles discovered | 4 (gf-helen, itgirl-helen, projectmanager-helen, sysadmin-helen) |
+| Profiles discovered | 3 (ai-assist, coder, sysadmin) |
 | Self-prompt method | `hermes chat -r` (default session) |
 | Verdict | **🟡** (soft reset required) |
 | Full chain success | ✅ Watchdog → profile discovery → threshold → instruct → one-shot → compare → verdict → cleanup |
