@@ -1,9 +1,13 @@
 # ECHO v2 — Effective Context Health Optimization
 
 **Date:** 2026-07-18
+
 **Status:** Production-ready (v2.3.1)
+
 **Author:** Ringo/MilkyWay008
+
 **Build and test environment:** Hermes Agent v0.18.x on Windows.
+
 **Not tested on:** Other platforms or older Hermes versions.
 
 ---
@@ -36,11 +40,13 @@ The mechanism is **degradation-proof**: worse context = worse recitation = stron
 ECHO does not rely on Hermes' hook systems (PluginManager or HookRegistry events) for message counting or trigger detection. Instead, it uses a **self-contained watchdog** that polls the SQLite state database directly — the one universal source of truth that every session writes to regardless of source (CLI, TUI, API server, web UI, Telegram, Discord, etc.).
 
 Key design highlights:
+- The watchdog starts and stops with the default gateway — no separate service to manage
 - No dependency on Hermes' PluginManager or HookRegistry event hooks for message counting
 - Single watchdog covers all profiles (default + gf-helen, itgirl-helen, etc.)
 - Self-prompts via `hermes -p <profile> chat -r {sid}` to target correct profile
 - Uses `sys.executable` for all subprocess calls — survives Hermes updates
 - All paths use `~/.hermes` — no hardcoded usernames
+
 
 ### 2.2 Component Map
 
@@ -122,10 +128,9 @@ A single watchdog launched by the default gateway monitors ALL Hermes profiles a
 | Agent | Gateway | How monitored |
 |-------|---------|--------------|
 | default | ✅ port 8643 | Polled via default `state.db` |
-| gf-helen | ✅ profile port | Polled via `profiles/gf-helen/state.db` (discovered automatically) |
-| itgirl-helen | ❌ not running | `profiles/itgirl-helen/state.db` discovered but no active sessions |
-| projectmanager-helen | ❌ not running | N/A — no state.db |
-| sysadmin-helen | ❌ not running | N/A — no state.db |
+| AI-assist | ✅ profile port 8651 | Polled via `profiles/ai-assist/state.db` (discovered automatically) |
+| coder | ❌ not running | Polled via `profiles/coder/state.db` discovered but no active sessions |
+| sysadmin | ❌ not running | Polled via `profiles/sysadmin/state.db` discovered but no active sessions |
 
 On startup, the watchdog scans `~/.hermes/profiles/*/state.db`. Any profile with a state.db is monitored every 30s. Self-prompts use `hermes -p <profile>` to target the correct profile's session.
 
