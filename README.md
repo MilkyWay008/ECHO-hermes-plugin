@@ -1,18 +1,48 @@
-# ECHO v2 — Effective Context Health Optimization
+# <p align="center">🫁 ECHO v2 — Effective Context Health Optimization for Hermes Agent</p>
 
-**Date:** 2026-07-18
+<p align="center">
+  <strong>Detect context degradation before it breaks your agent.</strong><br>
+  A self-contained, per-session <strong>context health monitoring & remediation system</strong> for Hermes Agent —<br>
+  detects context decay in long-running sessions and triggers soft resets to restore agent coherence.<br>
+  <em>No cron. No webhooks. No Discord. No external dependencies.</em>
+</p>
 
-**Status:** Production-ready (v2.3.1)
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/Status-Production_Ready-2EA043?style=for-the-badge" alt="Production Ready"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Version-v2.3.1-FFD700?style=for-the-badge" alt="v2.3.1"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Method-Canary_Story-8A2BE2?style=for-the-badge" alt="Canary Story"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Multi_Profile-Yes-FF6B6B?style=for-the-badge" alt="Multi-Profile"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Dependencies-Zero-FFA500?style=for-the-badge" alt="Zero Dependencies"></a>
+  <a href="#"><img src="https://img.shields.io/badge/License-MIT-purple?style=for-the-badge" alt="License MIT"></a>
+</p>
 
-**Author:** Ringo/MilkyWay008
-
-**Build and test environment:** Hermes Agent v0.18.x on Windows.
-
-**Not tested on:** Other platforms or older Hermes versions.
+<p align="center">
+  <strong>by Ringo / MilkyWay008</strong> · <a href="https://github.com/MilkyWay008/ECHO-hermes-plugin">github.com/MilkyWay008/ECHO-hermes-plugin</a>
+</p>
 
 ---
 
-## 1. What Is ECHO
+## 📑 Table of Contents
+
+- [💡 What Is ECHO](#-what-is-echo)
+- [🛠 Architecture](#-architecture)
+- [📊 Data Flow](#-data-flow)
+- [🌐 Multi-Profile Coverage](#-multi-profile-coverage)
+- [🏛 Key Architectural Decisions](#-key-architectural-decisions)
+- [📁 File Structure](#-file-structure)
+- [⚙️ Configuration](#️-configuration)
+- [🦜 The Canary Story](#-the-canary-story)
+- [🧪 Stress Testing Results](#-stress-testing-results)
+- [📏 Empirical Calibration](#-empirical-calibration)
+- [⚠️ Known Edge Cases](#️-known-edge-cases)
+- [🔮 Future Enhancements](#-future-enhancements)
+- [📜 Version History](#-version-history)
+- [📎 Appendices](#-appendices)
+- [🔍 Search Keywords](#-search-keywords)
+
+---
+
+## 💡 What Is ECHO
 
 ECHO (Effective Context Health Optimization) is a **self-contained, per-session context health monitoring and remediation system** for Hermes Agent. It detects context degradation in long-running sessions and triggers soft resets to restore agent coherence — without cron, webhooks, Discord, or any external dependencies.
 
@@ -29,17 +59,18 @@ A calibrated absurdist story ("The Great Intergalactic Submarine Heist") with de
 | 🔴 Medium-frequency | **Serious degradation** | Admiral Fluffington, Greg, Halo, Bitcoin, spaceship |
 | 🔴🔴 Repetitive core | **Critical** | "THAT'S NOT REGULATION!", cats & dogs |
 
-The mechanism is **degradation-proof**: worse context = worse recitation = stronger signal. The story is embedded in the agent's SOUL.md — read at session start, refreshed during soft resets.
+The mechanism is **degradation-proof**: worse context = worse recitation = stronger signal. The story is embedded in the agent's `SOUL.md` — read at session start, refreshed during soft resets.
 
 ---
 
-## 2. Architecture
+## 🛠 Architecture
 
-### 2.1 Design Principle
+### Design Principle
 
 ECHO does not rely on Hermes' hook systems (PluginManager or HookRegistry events) for message counting or trigger detection. Instead, it uses a **self-contained watchdog** that polls the SQLite state database directly — the one universal source of truth that every session writes to regardless of source (CLI, TUI, API server, web UI, Telegram, Discord, etc.).
 
 Key design highlights:
+
 - The watchdog starts and stops with the default gateway — no separate service to manage
 - No dependency on Hermes' PluginManager or HookRegistry event hooks for message counting
 - Single watchdog covers all profiles (default + ai-assist, coder, etc.)
@@ -47,8 +78,7 @@ Key design highlights:
 - Uses `sys.executable` for all subprocess calls — survives Hermes updates
 - All paths use `~/.hermes` — no hardcoded usernames
 
-
-### 2.2 Component Map
+### Component Map
 
 | Component | Location | Job |
 |-----------|----------|-----|
@@ -64,7 +94,9 @@ Key design highlights:
 | **SOUL.md** | `~/.hermes/SOUL.md` | Agent identity + appended canary story. |
 | **Temp files** | `~/.hermes/temp/echo/` | `_triggered_at.json`, `.watchdog-default.pid`, `.trigger-pending-{sid}`, instruct/recite/verdict files. |
 
-### 2.3 Data Flow
+---
+
+## 📊 Data Flow
 
 ```
 DEFAULT GATEWAY STARTUP
@@ -83,45 +115,47 @@ echo-poll.py (watchdog mode)
   ├─ Enters 30s polling loop
   │
   └─ Every 30s:
-       │
-       ├─ Is parent gateway PID alive?
-       │   ├─ NO → cleanup PID file → EXIT
-       │   └─ YES → continue
-       │
-       ├─ Check default state.db for active sessions
-       ├─ Check each discovered profile's state.db for active sessions
-       │
-       ├─ For each session NOT in skip-list:
-       │    ├─ Get total active message count
-       │    ├─ Check _triggered_at boundary
-       │    ├─ First encounter? → initialize at threshold boundary
-       │    └─ diff >= 75?
-       │         ├─ Write echo-instruct-{sid}--{ts}.md
-       │         ├─ Update _triggered_at[sid] = total
-       │         ├─ Launch echo-poll.py --recite-poll (one-shot)
-       │         └─ Self-prompt via CLI:
-       │              Default: hermes chat -r {sid} -Q -q "System: ECHO..."
-       │              Profile:  hermes -p <name> chat -r {sid} -Q -q "System: ECHO..."
-       │
-       └─ Sleep 30s
+      │
+      ├─ Is parent gateway PID alive?
+      │   ├─ NO → cleanup PID file → EXIT
+      │   └─ YES → continue
+      │
+      ├─ Check default state.db for active sessions
+      ├─ Check each discovered profile's state.db for active sessions
+      │
+      ├─ For each session NOT in skip-list:
+      │   ├─ Get total active message count
+      │   ├─ Check _triggered_at boundary
+      │   ├─ First encounter? → initialize at threshold boundary
+      │   └─ diff >= 75?
+      │       ├─ Write echo-instruct-{sid}--{ts}.md
+      │       ├─ Update _triggered_at[sid] = total
+      │       ├─ Launch echo-poll.py --recite-poll (one-shot)
+      │       └─ Self-prompt via CLI:
+      │           Default: hermes chat -r {sid} -Q -q "System: ECHO..."
+      │           Profile:  hermes -p <name> chat -r {sid} -Q -q "System: ECHO..."
+      │
+      └─ Sleep 30s
 
 ONE-SHOT MODE (launched per ECHO fire):
-       │
-       ├─ Phase 1: Poll every 5s for recite file (120s timeout)
-       │   → Found? Continue
-       │   → Timeout? Exit
-       │
-       ├─ Phase 2: Run echo-compare.py
-       │   → Reads recited story vs ground truth
-       │   → Outputs 3 lines: verdict, response text, next instruction
-       │   → Writes echo-verdict-{sid}--{ts}.md
-       │
-       ├─ Phase 3: Wait 60s (agent reads verdict file)
-       │
-       └─ Phase 4: Clean up instruct, recite, verdict files
+      │
+      ├─ Phase 1: Poll every 5s for recite file (120s timeout)
+      │   → Found? Continue
+      │   → Timeout? Exit
+      │
+      ├─ Phase 2: Run echo-compare.py
+      │   → Reads recited story vs ground truth
+      │   → Outputs 3 lines: verdict, response text, next instruction
+      │   → Writes echo-verdict-{sid}--{ts}.md
+      │
+      ├─ Phase 3: Wait 60s (agent reads verdict file)
+      │
+      └─ Phase 4: Clean up instruct, recite, verdict files
 ```
 
-### 2.4 Multi-Profile Coverage
+---
+
+## 🌐 Multi-Profile Coverage
 
 A single watchdog launched by the default gateway monitors ALL Hermes profiles automatically:
 
@@ -136,7 +170,7 @@ On startup, the watchdog scans `~/.hermes/profiles/*/state.db`. Any profile with
 
 ---
 
-## 3. Key Architectural Decisions
+## 🏛 Key Architectural Decisions
 
 | Decision | Rationale |
 |----------|-----------|
@@ -154,7 +188,7 @@ On startup, the watchdog scans `~/.hermes/profiles/*/state.db`. Any profile with
 
 ---
 
-## 4. File Structure
+## 📁 File Structure
 
 ```
 ~/.hermes/
@@ -194,7 +228,7 @@ On startup, the watchdog scans `~/.hermes/profiles/*/state.db`. Any profile with
 
 ---
 
-## 5. Configuration
+## ⚙️ Configuration
 
 ```json
 {
@@ -206,7 +240,7 @@ On startup, the watchdog scans `~/.hermes/profiles/*/state.db`. Any profile with
 
 ---
 
-## 6. The Canary Story
+## 🦜 The Canary Story
 
 ```
 # The Great Intergalactic Submarine Heist
@@ -251,7 +285,7 @@ Greg unpaused Halo. Karen kept writing.
 
 ---
 
-## 7. Stress Testing Results
+## 🧪 Stress Testing Results
 
 ### Session `20260629_153635_7a1fd7` (Desktop TUI session)
 
@@ -277,9 +311,10 @@ Greg unpaused Halo. Karen kept writing.
 
 ---
 
-## 8. Empirical Calibration
+## 📏 Empirical Calibration
 
 Data from real session-forensics analysis shows:
+
 - **~93 assistant messages** before first context degradation (SSH/WSL rule forgetting)
 - After first correction, runway drops to **~16 messages**
 - Combined recommendation: check at **~75 total messages** to catch before any cycle breaks
@@ -288,7 +323,7 @@ Full analysis in `skill-info.md` and `references/session-forensics.md`.
 
 ---
 
-## 9. Known Edge Cases
+## ⚠️ Known Edge Cases
 
 | Edge Case | Handling |
 |-----------|----------|
@@ -307,7 +342,7 @@ Full analysis in `skill-info.md` and `references/session-forensics.md`.
 
 ---
 
-## 10. Future Enhancements
+## 🔮 Future Enhancements
 
 - Multiple canary stories (rotate per cycle to prevent familiarity over months)
 - Adaptive threshold (🟡 verdict → shorten next check interval)
@@ -315,7 +350,9 @@ Full analysis in `skill-info.md` and `references/session-forensics.md`.
 - Daily memory summarization
 - Full session health log with degradation trends over time
 
-## 11. Version History
+---
+
+## 📜 Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
@@ -324,16 +361,19 @@ Full analysis in `skill-info.md` and `references/session-forensics.md`.
 
 ---
 
-## Appendix A: Deploy Instructions
+## 📎 Appendices
+
+### Appendix A: Deploy Instructions
 
 See `INSTALL.md` in the echo-build-v2.3 folder for full install instructions covering:
+
 - Plugin and hook deployment
 - SOUL.md canary story injection
 - Gateway restart
 - Profile coverage (no per-profile install needed)
 - Verification and uninstall
 
-## Appendix B: Stress Test Tool
+### Appendix B: Stress Test Tool
 
 The build includes `tests/echo-stress-v2.py` — sends sequential `search_files` queries to any session to trigger ECHO naturally.
 
@@ -343,4 +383,19 @@ python ~/.hermes/scripts/echo-stress-v2.py <session_id> [threshold]
 
 ---
 
-*ECHO v2.3 — Production-ready, watchdog-based, multi-profile context health monitoring*
+## 🔍 Search Keywords
+
+`ECHO` · `ECHO Hermes` · `context health` · `context degradation` · `context monitoring` · `context window management` · `Hermes plugin` · `Hermes context health` · `canary story` · `context sensor` · `soft reset agent` · `session health` · `long-running session` · `agent coherence` · `context remediation` · `Hermes watchdog` · `multi-profile monitoring` · `context window degradation detection`
+
+---
+
+## 📝 License
+
+**MIT** — free to use, modify, and distribute.
+
+---
+
+<p align="center">
+  <strong>ECHO v2.3 — Production-ready, watchdog-based, multi-profile context health monitoring.</strong><br>
+  <sub>Detect context degradation before it breaks your agent. 🫁</sub>
+</p>
